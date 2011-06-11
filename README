@@ -1,0 +1,9 @@
+Botcoin README
+
+1) Rename config-fillmein.ini to config.ini
+2) Edit config.ini and set your options.
+3) Make bootstrap file executable:
+    	shell> chmod +x run.php
+4) Run the bot
+	shell> ./run.php >> /dev/null
+5) Enjoy!
