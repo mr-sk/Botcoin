@@ -7,3 +7,16 @@ Botcoin README
 4) Run the bot
 	shell> ./run.php >> /dev/null
 5) Enjoy!
+
+Supported public commands:
+
+!help Display the help menu.
+!currency Display weighted currency values.
+!ticker Display
+
+
+Supported private commands:
+
+!join Join the pre-set channel.
+!shutdown Quit IRC / leave the server.
+!part Leave the channel, stay connected to server.

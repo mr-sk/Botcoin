@@ -24,7 +24,7 @@ class Botcoin
      * Supported public commands:
      * !help      Display the help menu.
      * !currency  Display weighted currency values.
-     * !ticker    Display
+     * !ticker    Display ticket values (high, low, bid, ask, etc).
      */
     const cmdHelp        = '!help';
     const cmdCurrency    = '!currency';
