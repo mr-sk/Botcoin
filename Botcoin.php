@@ -1,6 +1,6 @@
 <?php
 /**
- * @author      mr-sk aka sk s<k@mr-sk.com>
+ * @author      mr-sk aka sk <sk@mr-sk.com>
  * @package     Botcoin
  * @copyright   None yo, just keep this header in place!
  */
@@ -454,6 +454,7 @@ class Botcoin
                 
                     case self::cmdPart:
                         $this->sendData(sprintf("PART #%s", $this->_channel));
+                        fclose($this->_socket);
                     break;
                 }
             }
