@@ -178,7 +178,7 @@ class Botcoin
      */
     private function generateHelpMenu()
     {
-        $this->sendDataToChannel(sprintf("[%s v%s by sk]", __CLASS__, constVersion));
+        $this->sendDataToChannel(sprintf("[%s v%s by sk]", __CLASS__, self::constVersion));
         $this->sendDataToChannel(sprintf('%s   - BTC ticker (MtGox)', self::cmdTicker));
         $this->sendDataToChannel(sprintf('%s - Weighted curreny value (Bitcoincharts)', self::cmdCurrency));
         $this->sendDataToChannel(sprintf('%s    - Process any triggers we have.', self::cmdCheck));
