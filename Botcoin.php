@@ -10,27 +10,39 @@ class Botcoin
      * The current MtGox ticket API (GET Request, JSON Response)
      * The current bitcoincharts weighted currency prices API (GET Request, JSON Response)
      * Minimum wait time for successive mtGox requests.
-     * Minimum wait time for successive bitcointcharts requests. 
+     * Minimum wait time for successive bitcointcharts requests.
+     * ' ' ' mtGox trades API requests. 
      */
-    const mtgoxTicketURL = 'https://mtgox.com/code/data/ticker.php';
-    const btcchartsURL   = 'http://bitcoincharts.com/t/weighted_prices.json';
-    const mtgoxWaitSec   = 5;   
-    const bChartsWaitSec = 900; // 15m per their site. 
+    const mtgoxTicketURL    = 'https://mtgox.com/code/data/ticker.php';
+    const btcchartsURL      = 'http://bitcoincharts.com/t/weighted_prices.json';
+    const mtgoxTradesURL    = 'https://mtgox.com/code/data/getTrades.php';
+    const mtgoxWaitSec      = 5;   
+    const bChartsWaitSec    = 900; // 15m per their site. 
+    const mtgoxTradeWaitSec = 900; // 15 because we don't want to hammer their API.
     /*@#-*/
 
-    const constVersion   = 0.1; // Current version - updated manually.
+    const constVersion   = 0.2; // Current version - updated manually.
+    const GITURL         = 'https://github.com/mr-sk/Botcoin/blob/master/README';
 
     /**@#+
      * Supported public commands:
      * !help      Display the help menu.
      * !currency  Display weighted currency values.
      * !ticker    Display ticker values (high, low, bid, ask, etc).
+     * !trading   Displays detailed trading data for the last 3x days.
+     * !set       Set a watch for a high or low price.
+     * !check     Inspect each 'set' price and see if it should be triggered.
+     * !clear     Removes all 'set's.
+     * !show      Display (to nick) the value of the high/low lists.
      */
     const cmdHelp        = '!help';
     const cmdCurrency    = '!currency';
     const cmdTicker      = '!ticker';
+    const cmdTrading     = '!trading';
     const cmdSet         = '!set';
     const cmdCheck       = '!check';
+    const cmdClearSet    = '!clear';
+    const cmdShowSet     = '!show';
     /*@#-*/
 
     /**@#+
@@ -52,9 +64,11 @@ class Botcoin
      */
     static $_btcTickerStr   = null;
     static $_btcCurrencyStr = null;
+    static $_btcTradingStr  = null;
     
     private $_lastTickerRequest   = null;
     private $_lastCurrencyRequest = null;
+    private $_lastTradingRequest  = null;
     
     private $_highList  = null;
     private $_lowList   = null;
@@ -179,12 +193,15 @@ class Botcoin
     private function generateHelpMenu()
     {
         $this->sendDataToChannel(sprintf("[%s v%s by sk]", __CLASS__, self::constVersion));
-        $this->sendDataToChannel(sprintf('%s   - BTC ticker (MtGox)', self::cmdTicker));
-        $this->sendDataToChannel(sprintf('%s - Weighted curreny value (Bitcoincharts)', self::cmdCurrency));
-        $this->sendDataToChannel(sprintf('%s    - Process any triggers we have.', self::cmdCheck));
-        $this->sendDataToChannel('            This can also be set in config.ini');
-        $this->sendDataToChannel(sprintf('%s  <high|low> price - Set an alert at a price', self::cmdSet));
-        $this->sendDataToChannel('      Example: set high 30.01 [alert when BTC >= 30.01]');
+        $this->sendDataToChannel(sprintf("commands: %s, %s, %s, %s, %s, %s, %s",
+                                         self::cmdSet,
+                                         self::cmdShowSet,
+                                         self::cmdCheck,
+                                         self::cmdClearSet,
+                                         self::cmdTicker,
+                                         self::cmdTrading,
+                                         self::cmdCurrency));
+        $this->sendDataToChannel(sprintf('See %s for a detailed list of commands', self::GITURL));
     }
 
     /**
@@ -281,7 +298,7 @@ class Botcoin
     private function getCurrencyData()
     {
         // Enforce that we can't hit the Bitcoins server more than once every 15 minutes.
-        if ((time() > $this->_lastCurrencyRequest+900) || null == self::$_btcCurrencyStr)
+        if ((time() > $this->_lastCurrencyRequest+self::bChartsWaitSec) || null == self::$_btcCurrencyStr)
         {
             $currencyJSON = file_get_contents(self::btcchartsURL);
             if (FALSE == $currencyJSON)
@@ -300,6 +317,101 @@ class Botcoin
         
         return sprintf("[%ss stale] %s", (time() - $this->_lastCurrencyRequest), self::$_btcCurrencyStr);
     }
+    
+    /**
+     *
+     *
+     */
+    private function getTradingData()
+    {
+        if ((time() > $this->_lastTradingRequest+self::mtgoxTradeWaitSec) || null == self::$_btcTradingStr)
+        {
+            $tradeJSON = file_get_contents(self::mtgoxTradesURL);
+            if (FALSE == $tradeJSON)
+            {
+                return 'Error retreiving trades, try again soon';
+            }
+            
+            $json = json_decode($tradeJSON);
+            $tmpStack = array();
+            $internalCount = $sectionCount = $volume = $cash = 0;
+            foreach($json as $trade)
+            {
+                if (date('Y-m-d') == date('Y-m-d', $trade->date))
+                {
+                    $volume += $trade->amount;
+                    $cash   += $trade->price;
+                    array_push($tmpStack, $trade);
+                    $sectionCount++;
+                }
+                
+                if (date('Y-m-d') == date('Y-m-d', $trade->date)
+                && (date('Y-m-d') == !isset($json[$internalCount+1]->date)))
+                {
+                    $this->computeWeightedVolumeEOD($tmpStack, 10, $prevVolume, $price);        
+                    self::$_btcTradingStr =
+                        $this->prepareTradingOutput('Todays',
+                                                    $cash,
+                                                    $price,
+                                                    $volume,
+                                                    $prevVolume,
+                                                    $sectionCount);  
+                }
+                $internalCount++;
+            }
+            
+            $this->_lastTradingRequest = time();
+            return self::$_btcTradingStr;
+        }
+        
+        return sprintf("[%ss stale] %s", (time() - $this->_lastTradingRequest),
+                       self::$_btcTradingStr);        
+    }
+
+    /**
+     * Takes the gathered trading data and formats into a string for the user.
+     *
+     * @param   String  $date       A date representation.
+     * @param   Float   $cash       The amount of money traded.
+     * @param   Float   $price      Price of the last highest volume trade (n of 10)
+     * @param   Float   $volume     The number of BTC peices traded.
+     * @param   Float   $prevVolume The highest volume share of the previous 10 checked.
+     * @param   int     $sectionCount A counter that acts as an internal position pointer.
+     *
+     * @return  String              A pretty print string for the client of trading data.
+     */
+    private function prepareTradingOutput($date, $cash, $price, $volume, $prevVolume, $sectionCount)
+    {
+        $str  = sprintf("%s | W-EOD:$%s V:%s |", $date, $price, $prevVolume);
+        $str .= sprintf(" V:%s | USD value:%.4f | ", $volume, $cash);
+        $str .= sprintf("Avg V:%.4f for %s transactions\n", ($volume / $sectionCount), $sectionCount);
+        
+        return $str;
+    }
+
+    /**
+     * Since we don't have EOD data, we'll compute it by taking the highest volume
+     * trade of the LAST 10 trades for the given trading day. From that we'll use
+     * the volume and price for that EOD's data.
+     *
+     * @param   Array   A stack of trades.
+     * @param   int     Counter for trades.
+     * @param   Float   REFERENCE - we'll set this value after calculating it.
+     * @param   Float   REFERENCE - ditto.
+     */
+    private function computeWeightedVolumeEOD($tmpStack, $numberOfLastTrades, &$prevVolume, &$price)
+    {
+        $volume = $price = $prevVolume = 0;
+        for($i=count($tmpStack)-$numberOfLastTrades; $i<count($tmpStack); $i++)
+        {
+            $volume = $tmpStack[$i]->amount;
+            if ($volume > $prevVolume)
+            {
+                $prevVolume = $volume;
+                $price      = $tmpStack[$i]->price;
+            }
+        }    
+    }    
     
     /**
      * This method allows us to set price alerts when the BTC value moves. For example we
@@ -338,6 +450,49 @@ class Botcoin
         }   
 
         $this->sendDataToNick('Trigger set.');                 
+    }
+    
+    /**
+     * Resets both the low and high lists.
+     */
+    private function clearBTCWatch()
+    {
+        $this->_lowList  = array();
+        $this->_highList = array();
+        $this->sendDataToNick('Watchlist cleared.');                         
+    }
+
+    /**
+     * Foreach of the 'lists' that has values, we send back a comma seperated list to the
+     * request nick.
+     */
+    private function showBTCWatch()
+    {
+        if (count($this->_lowList))
+        {
+            $this->sendDataToNick(sprintf("Low list: %s",
+                                         $this->makeStringFromList($this->_lowList)));
+        }
+        if (count($this->_highList))
+            $this->sendDataToNick(sprintf("High list: %s",
+                                         $this->makeStringFromList($this->_highList)));
+    }
+   
+   /**
+    * Method for assisting in creating a user friendly string of watch prices.
+    *
+    * @param    Array  $set    A multi-dimensional (2) array of high or low watch prices.
+    * @return   String         A string of prices or an empty string.
+    */
+    private function makeStringFromList($set)
+    {
+        $out = array();
+        foreach($set as $s)
+        {
+            array_push($out, $s[0]);
+        }
+
+        return (join(',', $out));
     }
     
     /**
@@ -477,12 +632,24 @@ class Botcoin
                         $this->sendDataToChannel($this->getCurrencyData());
                     break;
                 
+                    case self::cmdTrading:
+                        $this->sendDataToChannel($this->getTradingData());
+                    break;
+                
                     case self::cmdSet:
                         $this->setBTCWatch();
                     break;
                         
                     case self::cmdCheck:
                         $this->checkWatchLists();
+                    break;
+                
+                    case self::cmdClearSet:
+                        $this->clearBTCWatch();
+                    break;
+                
+                    case self::cmdShowSet:
+                        $this->showBTCWatch();
                     break;
                 }
             }

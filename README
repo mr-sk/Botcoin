@@ -1,5 +1,14 @@
 Botcoin README
 
+INTRO
+-----
+This is an IRC bot in PHP that pulls down and organizes various Bitcoin related
+market data. It also allows setting of triggers / alerts for price points. I plan
+on adding a bunch of functionality in the comming weeks, so stay tuned.
+
+
+INSTALLATION
+-------------
 1) Rename config-fillmein.ini to config.ini
 2) Edit config.ini and set your options.
 
@@ -20,15 +29,31 @@ tickerUpdateFreq  = 30           # How often to update ticker data (Can't be > M
 	shell> ./run.php >> /dev/null
 5) Enjoy!
 
+
+COMMANDS
+--------
 Supported public commands:
 
-!help Display the help menu.
-!currency Display weighted currency values.
-!ticker Display
+     * Supported public commands:
+     * !help      Display the help menu.
+     * !currency  Display weighted currency values.
+     * !ticker    Display ticker values (high, low, bid, ask, etc).
+     * !trading   Displays detailed trading data for the last 3x days.
+     * !set       Set a watch for a high or low price.
+     * !check     Inspect each 'set' price and see if it should be triggered.
+     * !clear     Removes all 'set's.
+     * !show      Display (to nick) the value of the high/low lists.
 
 
 Supported private commands:
 
-!join Join the pre-set channel.
-!shutdown Quit IRC / leave the server.
-!part Leave the channel, stay connected to server.
+     * Supported private commands:
+     * !join     Join the pre-set channel.
+     * !shutdown Quit IRC / leave the server.
+     * !part     Leave the channel, stay connected to server.
+
+
+SUPPORT
+-------
+If you enjoy this bot, please donate: 1K2JWmpd75ehXxco1SWtGLaceQsRytpyEv or
+donate code/features/bug fixes.
