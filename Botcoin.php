@@ -9,19 +9,24 @@ class Botcoin
     /**@#+
      * The current MtGox ticket API (GET Request, JSON Response)
      * The current bitcoincharts weighted currency prices API (GET Request, JSON Response)
+     * mtGox trades for the last 3x days (typically) (GET Request, JSON Response)
+     * TradeHill trades for the last x days (GET Request, JSON Response)
      * Minimum wait time for successive mtGox requests.
      * Minimum wait time for successive bitcointcharts requests.
-     * ' ' ' mtGox trades API requests. 
+     * ' ' ' mtGox trades API requests.
+     * 
      */
     const mtgoxTicketURL    = 'https://mtgox.com/code/data/ticker.php';
     const btcchartsURL      = 'http://bitcoincharts.com/t/weighted_prices.json';
     const mtgoxTradesURL    = 'https://mtgox.com/code/data/getTrades.php';
+    const thTradesURL       = 'https://api.tradehill.com/API/USD/Trades';
     const mtgoxWaitSec      = 5;   
     const bChartsWaitSec    = 900; // 15m per their site. 
     const mtgoxTradeWaitSec = 900; // 15 because we don't want to hammer their API.
+    const thTradeWaitSec    = 900; // ditto.
     /*@#-*/
 
-    const constVersion   = 0.2; // Current version - updated manually.
+    const constVersion   = 0.3; // Current version - updated manually.
     const GITURL         = 'https://github.com/mr-sk/Botcoin/blob/master/README';
 
     /**@#+
@@ -65,10 +70,12 @@ class Botcoin
     static $_btcTickerStr   = null;
     static $_btcCurrencyStr = null;
     static $_btcTradingStr  = null;
+    static $_thTradingStr   = null;
     
     private $_lastTickerRequest   = null;
     private $_lastCurrencyRequest = null;
     private $_lastTradingRequest  = null;
+    private $_lastTHTradingRequest= null;
     
     private $_highList  = null;
     private $_lowList   = null;
@@ -319,53 +326,101 @@ class Botcoin
     }
     
     /**
+     * The entry point for fetching trading data. We make two calls:
+     * - MtGox trades
+     * - TradeHill trades
+     * Format the response and return the strings to the channel. We also do checking
+     * on the time to make sure we don't hit the servers too often.
      *
-     *
+     * @return  String  Error messages or trading data.
      */
     private function getTradingData()
     {
         if ((time() > $this->_lastTradingRequest+self::mtgoxTradeWaitSec) || null == self::$_btcTradingStr)
         {
-            $tradeJSON = file_get_contents(self::mtgoxTradesURL);
-            if (FALSE == $tradeJSON)
-            {
-                return 'Error retreiving trades, try again soon';
-            }
-            
-            $json = json_decode($tradeJSON);
-            $tmpStack = array();
-            $internalCount = $sectionCount = $volume = $cash = 0;
-            foreach($json as $trade)
-            {
-                if (date('Y-m-d') == date('Y-m-d', $trade->date))
-                {
-                    $volume += $trade->amount;
-                    $cash   += $trade->price;
-                    array_push($tmpStack, $trade);
-                    $sectionCount++;
-                }
-                
-                if (date('Y-m-d') == date('Y-m-d', $trade->date)
-                && (date('Y-m-d') == !isset($json[$internalCount+1]->date)))
-                {
-                    $this->computeWeightedVolumeEOD($tmpStack, 10, $prevVolume, $price);        
-                    self::$_btcTradingStr =
-                        $this->prepareTradingOutput('Todays',
-                                                    $cash,
-                                                    $price,
-                                                    $volume,
-                                                    $prevVolume,
-                                                    $sectionCount);  
-                }
-                $internalCount++;
-            }
-            
-            $this->_lastTradingRequest = time();
-            return self::$_btcTradingStr;
+            $this->sendDataToChannel($this->fetchTradingDataFromExchange('MtGox',
+                                                                         self::mtgoxTradesURL,
+                                                                         self::$_btcTradingStr,
+                                                                        $this->_lastTradingRequest));
+        }
+        else
+        {
+            $this->sendDataToChannel(sprintf("[%ss stale] %s MtGox",
+                                             (time() - $this->_lastTradingRequest),
+                                              self::$_btcTradingStr));                
         }
         
-        return sprintf("[%ss stale] %s", (time() - $this->_lastTradingRequest),
-                       self::$_btcTradingStr);        
+        if ((time() > $this->_lastTHTradingRequest+self::thTradeWaitSec) || null == self::$_thTradingStr)
+        {
+            $this->sendDataToChannel($this->fetchTradingDataFromExchange('TradeHill',
+                                                                         self::thTradesURL,
+                                                                         self::$_thTradingStr,
+                                                                         $this->_lastTHTradingRequest));            
+        }
+        else
+        {
+            $this->sendDataToChannel(sprintf("[%ss stale] %s Tradehill",
+                                             (time() - $this->_lastTHTradingRequest),
+                                             self::$_thTradingStr));              
+        }
+    }
+    
+    /**
+     * For the provided exchange API (they happen to have the same JSON Response data)
+     * we make a call and parse the data.
+     *
+     * @param   String  The name of the exchange.
+     * @param   String  The URL of the API to call.
+     * @param   String  REFERENCE The static string for caching results.
+     * @param   Time    The last time we successfully called this API
+     *
+     * @return  String  An error message or formatted trading data.
+     */
+    private function fetchTradingDataFromExchange($exch, $url, &$staticStorage, &$lastTradingRequest)    
+    {
+        $tradeJSON = file_get_contents($url);
+        if (FALSE == $tradeJSON)
+        {
+            return 'Error retreiving trades, try again soon';
+        }
+        
+        $json = json_decode($tradeJSON);
+        if (NULL == $json || FALSE == $json)
+        {
+            return 'Response is malformed';
+        }
+        
+        $tmpStack = array();
+        $internalCount = $sectionCount = $volume = $cash = 0;
+        foreach($json as $trade)
+        {
+            if (date('Y-m-d') == date('Y-m-d', $trade->date))
+            {
+                $volume += $trade->amount;
+                $cash   += $trade->price;
+                array_push($tmpStack, $trade);
+                $sectionCount++;
+            }
+            
+            if (date('Y-m-d') == date('Y-m-d', $trade->date)
+            && (date('Y-m-d') == !isset($json[$internalCount+1]->date)))
+            {
+                $this->computeWeightedVolumeEOD($tmpStack, 10, $prevVolume, $price);        
+                $staticStorage =
+                    $this->prepareTradingOutput('Todays ' . $exch,
+                                                $cash,
+                                                $price,
+                                                $volume,
+                                                $prevVolume,
+                                                $sectionCount);  
+            }
+            $internalCount++;
+        }
+        
+        $lastTradingRequest = time();
+        return $staticStorage;
+        
+            
     }
 
     /**

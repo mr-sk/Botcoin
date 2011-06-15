@@ -38,7 +38,7 @@ Supported public commands:
      * !help      Display the help menu.
      * !currency  Display weighted currency values.
      * !ticker    Display ticker values (high, low, bid, ask, etc).
-     * !trading   Displays detailed trading data for the last 3x days.
+     * !trading   Displays detailed trading data for today. (MtGox & TradeHill)
      * !set       Set a watch for a high or low price.
      * !check     Inspect each 'set' price and see if it should be triggered.
      * !clear     Removes all 'set's.
@@ -57,3 +57,11 @@ SUPPORT
 -------
 If you enjoy this bot, please donate: 1K2JWmpd75ehXxco1SWtGLaceQsRytpyEv or
 donate code/features/bug fixes.
+
+
+CHANGE LOG
+----------
+
+0.1:	Created.
+0.2:	Minor fixes / refactoring. Added !check, !clear and !show.
+0.3:	Added TradeHill trades data.
