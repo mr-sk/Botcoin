@@ -3,6 +3,8 @@
  * @author      mr-sk aka sk <sk@mr-sk.com>
  * @package     Botcoin
  * @copyright   None yo, just keep this header in place!
+ *              If you find this project or code useful, please consider donating:
+ *                  
  */
 class Botcoin
 {
@@ -26,7 +28,7 @@ class Botcoin
     const thTradeWaitSec    = 900; // ditto.
     /*@#-*/
 
-    const constVersion   = 0.3; // Current version - updated manually.
+    const constVersion   = 0.4; // Current version - updated manually.
     const GITURL         = 'https://github.com/mr-sk/Botcoin/blob/master/README';
 
     /**@#+
@@ -129,7 +131,9 @@ class Botcoin
         
         $this->_highList = array();
         $this->_lowList  = array();
-        
+
+        setlocale(LC_MONETARY, 'en_US');
+
         $this->dbg("Starting ...");
     }
 
@@ -268,17 +272,18 @@ class Botcoin
             }
             
             $btcSet = json_decode($btcJSON);
-            $spread = ((float) $btcSet->ticker->sell) - ((float) $btcSet->ticker->buy);
+            $spread = bcsub($btcSet->ticker->sell, $btcSet->ticker->buy, 6);
             
             self::$_btcTickerStr =
-                sprintf("High:%s Low:%s Vol:%s Bid:%s Ask:%s Last:%s Spread:%s",
+                sprintf("($) High:%s Low:%s Vol:%s Bid:%s Ask:%s Last:%s Spread:%s",
                         $btcSet->ticker->high,
                         $btcSet->ticker->low,
-                        $btcSet->ticker->vol,
+                        number_format($btcSet->ticker->vol),
                         $btcSet->ticker->buy,
                         $btcSet->ticker->sell,
                         $btcSet->ticker->last,
                         $spread);
+
             $this->_lastTickerRequest = time();
 
             // Set the current price to the last sale price. 
@@ -437,9 +442,9 @@ class Botcoin
      */
     private function prepareTradingOutput($date, $cash, $price, $volume, $prevVolume, $sectionCount)
     {
-        $str  = sprintf("%s | W-EOD:$%s V:%s |", $date, $price, $prevVolume);
-        $str .= sprintf(" V:%s | USD value:%.4f | ", $volume, $cash);
-        $str .= sprintf("Avg V:%.4f for %s transactions\n", ($volume / $sectionCount), $sectionCount);
+        $str  = sprintf("%s | W-EOD:$%s V:%s |", $date, money_format('%i', $price), number_format($prevVolume));
+        $str .= sprintf(" V:%s | $%s | ", number_format($volume), money_format('%i', $cash));
+        $str .= sprintf("Avg V:%s for %s transactions\n", number_format(($volume / $sectionCount)), $sectionCount);
         
         return $str;
     }

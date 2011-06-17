@@ -65,3 +65,4 @@ CHANGE LOG
 0.1:	Created.
 0.2:	Minor fixes / refactoring. Added !check, !clear and !show.
 0.3:	Added TradeHill trades data.
+0.4:    Improved bitcoin / currency precision. Cleaned up command output.
